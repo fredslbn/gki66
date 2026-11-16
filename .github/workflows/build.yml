@@ -56,31 +56,33 @@ jobs:
           echo "Kernel commit:"
           git rev-parse HEAD
 
-      - name: Inspect Kleaf workspace
+      - name: Initialize AOSP repo
         run: |
-          cd kernel
+          # Initialize AOSP repo
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android15-6.6-lts --depth=1
+          repo sync --optimized-fetch --prune -j8
+      
+      - name: Inspect Kleaf files
+        working-directory: kernel
+        run: |
+          git branch --show-current
+          ls -la
+          ls -la build/kernel/kleaf || true
+          ls -la tools || true
+          find . -name msm_platforms.bzl -o -name bazel.sh
 
-          echo "Workspace files:"
-          find . -maxdepth 3 \( \
-            -name BUILD.bazel -o \
-            -name MODULE.bazel -o \
-            -name WORKSPACE -o \
-            -name bazel.WORKSPACE \
-          \) -print | head -100
-
-          echo "Bazel launcher:"
-          ls -l tools/bazel || true
-
-          if [ ! -x tools/bazel ]; then
-            echo "::error::Kleaf launcher is missing."
-            echo "::error::Initialize the matching kernel/build workspace."
-            exit 1
-          fi
-
+      - name: Initialize Kleaf
+        working-directory: kernel
+        run: |
+            mkdir -p tools
+            ln -sf ../build/kernel/kleaf/bazel.sh tools/bazel
+            test -x tools/bazel
+            test -f build/kernel/kleaf/bazel.WORKSPACE
+      
       - name: Apply custom patches
         run: |
           chmod +x scripts/prepare.sh
-          ./scripts/prepare.sh
+          # ./scripts/prepare.sh
 
       - name: Clean Bazel output
         if: ${{ inputs.clean_build }}
