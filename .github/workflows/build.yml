@@ -1,0 +1,109 @@
+name: POCO F7 GKI 6.6
+
+on:
+  workflow_dispatch:
+    inputs:
+      bazel_target:
+        description: 'Kleaf kernel_build target'
+        required: true
+        type: string
+      clean_build:
+        description: 'Clean Bazel output before build'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build POCO F7 Kernel
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    env:
+      KERNEL_REPO: https://git.codelinaro.org/clo/la/kernel/qcom.git
+      KERNEL_BRANCH: kernel.lnx.6.6.r1-rel
+      BAZEL_TARGET: ${{ inputs.bazel_target }}
+
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            git curl zip unzip \
+            python3 \
+            bc bison flex \
+            build-essential \
+            libssl-dev libelf-dev \
+            rsync
+
+      - name: Clone Qualcomm kernel
+        run: |
+          git clone \
+            --depth=1 \
+            --single-branch \
+            --branch "$KERNEL_BRANCH" \
+            "$KERNEL_REPO" kernel
+
+          cd kernel
+
+          echo "Kernel commit:"
+          git rev-parse HEAD
+
+      - name: Inspect Kleaf workspace
+        run: |
+          cd kernel
+
+          echo "Workspace files:"
+          find . -maxdepth 3 \( \
+            -name BUILD.bazel -o \
+            -name MODULE.bazel -o \
+            -name WORKSPACE -o \
+            -name bazel.WORKSPACE \
+          \) -print | head -100
+
+          echo "Bazel launcher:"
+          ls -l tools/bazel || true
+
+          if [ ! -x tools/bazel ]; then
+            echo "::error::Kleaf launcher is missing."
+            echo "::error::Initialize the matching kernel/build workspace."
+            exit 1
+          fi
+
+      - name: Apply custom patches
+        run: |
+          chmod +x scripts/prepare.sh
+          ./scripts/prepare.sh
+
+      - name: Clean Bazel output
+        if: ${{ inputs.clean_build }}
+        run: |
+          cd kernel
+          tools/bazel clean --expunge
+
+      - name: Build kernel
+        run: |
+          chmod +x scripts/build.sh
+          ./scripts/build.sh
+
+      - name: Package AnyKernel3
+        run: |
+          chmod +x scripts/package.sh
+          ./scripts/package.sh
+
+      - name: Upload kernel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: POCO-F7-GKI-6.6
+          path: |
+            out/Image
+            out/AnyKernel3-POCO-F7.zip
+          if-no-files-found: error
+          retention-days: 1
