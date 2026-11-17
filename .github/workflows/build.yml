@@ -33,16 +33,28 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-
+          sudo apt-get update          
+          sudo apt-get update -qq
+          
           sudo apt-get install -y \
             git curl zip unzip \
             python3 \
             bc bison flex \
             build-essential \
             libssl-dev libelf-dev \
-            rsync
+            rsync repo rsync \
+            aria2
 
+      - name: Setup SWAP 10GB
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 10
+            
+      - name: Tune Swap
+        run: |
+          echo "vm.swappiness=80" | sudo tee -a /etc/sysctl.conf
+          sudo sysctl -p
+      
       - name: Clone Qualcomm kernel
         run: |
           git clone \
